@@ -16,3 +16,7 @@ local.properties
 
 # Firebase client config (not secret, but local to this checkout)
 app/google-services.json
+
+# Local-only notes and IDE state
+FIXES_SUMMARY.md
+/.idea/vcs.xml
