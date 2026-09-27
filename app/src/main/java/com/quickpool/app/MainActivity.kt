@@ -36,6 +36,9 @@ class MainActivity : ComponentActivity() {
         // BitmapDescriptorFactory (used for our custom map pins) throws unless the
         // Maps SDK has been initialised first.
         com.google.android.gms.maps.MapsInitializer.initialize(applicationContext)
+        // Must exist before any push arrives; a notification posted to a missing channel
+        // is dropped by the system without a word.
+        com.quickpool.app.notifications.ensureNotificationChannels(applicationContext)
         if (!com.google.android.libraries.places.api.Places.isInitialized()) {
             com.google.android.libraries.places.api.Places.initialize(applicationContext, BuildConfig.MAPS_API_KEY)
         }
@@ -48,6 +51,13 @@ class MainActivity : ComponentActivity() {
                     locationPermissionGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
                             permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
                 }
+
+                // Notification permission is asked for separately, and only once the user is
+                // signed in: asking a stranger on first launch is the reliable way to get a
+                // permanent "deny", and the permission cannot be re-requested after that.
+                val notificationPermissionLauncher = rememberLauncherForActivityResult(
+                    ActivityResultContracts.RequestPermission()
+                ) { /* Declined just means no pushes; the Alerts inbox still works. */ }
 
                 LaunchedEffect(Unit) {
                     permissionLauncher.launch(
@@ -67,6 +77,13 @@ class MainActivity : ComponentActivity() {
                     LaunchedEffect(Unit) {
                         tokenStore.loadIntoMemory()
                         val existingToken = tokenStore.getAccessToken()
+                        if (existingToken != null) {
+                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            }
+                            com.quickpool.app.notifications.DeviceRegistrar
+                                .registerIfSignedIn(applicationContext)
+                        }
                         startDestination = when {
                             existingToken == null -> Routes.LOGIN
                             // Signed in but never finished registering.
@@ -82,6 +99,11 @@ class MainActivity : ComponentActivity() {
                             locationPermissionGranted = locationPermissionGranted,
                             onLogout = {
                                 scope.launch {
+                                    // Before clearing the auth token: the unregister call is
+                                    // authenticated, and without it this device keeps buzzing
+                                    // for the user who just signed out.
+                                    com.quickpool.app.notifications.DeviceRegistrar
+                                        .unregister(applicationContext)
                                     tokenStore.clear()
                                     com.quickpool.app.data.TokenHolder.accessToken = null
                                 }

@@ -25,6 +25,8 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun OfferRideScreen(
+    origin: PickedPlace?,
+    onPickOrigin: () -> Unit,
     destination: PickedPlace?,
     onPickDestination: () -> Unit,
     onPosted: () -> Unit,
@@ -34,17 +36,19 @@ fun OfferRideScreen(
     val locationProvider = remember { CurrentLocationProvider(context) }
     val scope = rememberCoroutineScope()
 
-    var origin by remember { mutableStateOf<LatLng?>(null) }
+    // Falls back to GPS the moment the screen opens; a picked [origin] overrides it.
+    var gpsOrigin by remember { mutableStateOf<LatLng?>(null) }
+    val effectiveOrigin = origin?.latLng ?: gpsOrigin
     var departureTime by remember { mutableStateOf("") }
     var seats by remember { mutableIntStateOf(2) }
     var price by remember { mutableStateOf("") }
     var isPosting by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(Unit) { origin = locationProvider.getCurrentLatLng() }
+    LaunchedEffect(Unit) { gpsOrigin = locationProvider.getCurrentLatLng() }
 
     fun post() {
-        val from = origin ?: return
+        val from = effectiveOrigin ?: return
         val to = destination ?: return
         isPosting = true
         message = null
@@ -90,7 +94,38 @@ fun OfferRideScreen(
         )
         Spacer(modifier = Modifier.height(20.dp))
 
-        FieldCard(label = "From", value = if (origin != null) "Your current location" else "Locating…")
+        Surface(
+            onClick = onPickOrigin,
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "From",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        origin?.name
+                            ?: if (gpsOrigin != null) "Your current location" else "Locating…",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1
+                    )
+                }
+                Icon(
+                    Icons.Default.Search,
+                    contentDescription = "Change pickup point",
+                    tint = MaterialTheme.colorScheme.secondary
+                )
+            }
+        }
 
         Surface(
             onClick = onPickDestination,
@@ -172,7 +207,7 @@ fun OfferRideScreen(
         Spacer(modifier = Modifier.height(16.dp))
         Button(
             onClick = { post() },
-            enabled = !isPosting && destination != null && origin != null && departureTime.isNotEmpty(),
+            enabled = !isPosting && destination != null && effectiveOrigin != null && departureTime.isNotEmpty(),
             colors = ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.onSurface,
                 contentColor = MaterialTheme.colorScheme.surface
@@ -188,24 +223,5 @@ fun OfferRideScreen(
             Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         }
         Spacer(modifier = Modifier.height(24.dp))
-    }
-}
-
-@Composable
-private fun FieldCard(label: String, value: String) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = RoundedCornerShape(14.dp),
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                label,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(value, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
-        }
     }
 }

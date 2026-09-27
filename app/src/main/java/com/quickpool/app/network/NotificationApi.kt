@@ -4,11 +4,15 @@ import retrofit2.Response
 import retrofit2.http.GET
 import retrofit2.http.PUT
 import retrofit2.http.Path
+import retrofit2.http.Query
 
 interface NotificationApi {
 
     @GET("api/v1/notifications")
-    suspend fun list(): Response<List<NotificationDto>>
+    suspend fun list(
+        @Query("page") page: Int = 0,
+        @Query("size") size: Int = DEFAULT_PAGE_SIZE
+    ): Response<PageResponse<NotificationDto>>
 
     @GET("api/v1/notifications/unread-count")
     suspend fun unreadCount(): Response<UnreadCountDto>

@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import com.quickpool.app.network.ApiClient
 import com.quickpool.app.network.BookingWithRideDto
 import com.quickpool.app.network.RideOfferResponseDto
+import com.quickpool.app.ui.components.LoadMoreRow
 import com.quickpool.app.ui.components.RateUserDialog
 import com.quickpool.app.ui.components.loadGivenRatings
 import com.quickpool.app.ui.components.ratingKey
@@ -22,8 +23,11 @@ import kotlinx.coroutines.launch
 @Composable
 fun MyBookingsScreen(onTrack: (String) -> Unit, onDataChanged: () -> Unit) {
     var bookings by remember { mutableStateOf<List<BookingWithRideDto>>(emptyList()) }
+    var page by remember { mutableStateOf(0) }
+    var hasNext by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(true) }
+    var isLoadingMore by remember { mutableStateOf(false) }
     // driverId per ride, so a passenger can rate whoever drove them
     var drivers by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var ratingTarget by remember { mutableStateOf<BookingWithRideDto?>(null) }
@@ -35,13 +39,34 @@ fun MyBookingsScreen(onTrack: (String) -> Unit, onDataChanged: () -> Unit) {
     suspend fun load() {
         try {
             ratedKeys = loadGivenRatings()
-            val response = ApiClient.rideApi.myBookings()
-            if (response.isSuccessful) bookings = response.body() ?: emptyList()
-            else errorMessage = "Failed to load (${response.code()})"
+            val response = ApiClient.rideApi.myBookings(page = 0)
+            if (response.isSuccessful) {
+                val body = response.body()
+                bookings = body?.content ?: emptyList()
+                hasNext = body?.hasNext ?: false
+                page = 0
+            } else errorMessage = "Failed to load (${response.code()})"
         } catch (e: Exception) {
             errorMessage = "Error: ${e.message}"
         } finally {
             isLoading = false
+        }
+    }
+
+    suspend fun loadMore() {
+        if (isLoadingMore || !hasNext) return
+        isLoadingMore = true
+        try {
+            val response = ApiClient.rideApi.myBookings(page = page + 1)
+            if (response.isSuccessful) {
+                val body = response.body()
+                bookings = bookings + (body?.content ?: emptyList())
+                hasNext = body?.hasNext ?: false
+                page += 1
+            }
+        } catch (_: Exception) {
+        } finally {
+            isLoadingMore = false
         }
     }
 
@@ -126,6 +151,9 @@ fun MyBookingsScreen(onTrack: (String) -> Unit, onDataChanged: () -> Unit) {
                         }
                     }
                 )
+            }
+            if (hasNext) {
+                item { LoadMoreRow(isLoading = isLoadingMore) { scope.launch { loadMore() } } }
             }
         }
     }

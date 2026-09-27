@@ -13,3 +13,6 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Firebase client config (not secret, but local to this checkout)
+app/google-services.json

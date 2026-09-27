@@ -11,10 +11,18 @@ data class LocationBroadcast(val userId: String, val role: String, val lat: Doub
 class StompManager(private val rideId: String, private val token: String) {
 
     private var stompClient: StompClient? = null
-    private val disposables = CompositeDisposable()
+    // A CompositeDisposable that has been disposed once is dead forever — RxJava disposes any
+    // later .add() immediately, silently, with no error. LiveLocationScreen calls connect() a
+    // second time as soon as myUserId resolves (DisposableEffect(myUserId) re-keying from null),
+    // which used to call disconnect() → connect() on the *same* composite: the topic subscription
+    // added on that second call was disposed the instant it was added, so no broadcast — driver's
+    // or any passenger's — was ever actually delivered, even though outgoing sendLocation() kept
+    // working (it doesn't go through this composite). A fresh instance per connect() fixes it.
+    private var disposables = CompositeDisposable()
     private val gson = Gson()
 
     fun connect(onLocationReceived: (LocationBroadcast) -> Unit) {
+        disposables = CompositeDisposable()
         // localhost works via `adb reverse tcp:8080 tcp:8080`; swap to LAN IP for Wi-Fi testing.
         val url = "ws://localhost:8080/ws?token=$token"
         stompClient = Stomp.over(Stomp.ConnectionProvider.OKHTTP, url)

@@ -38,4 +38,5 @@ object ApiClient {
     val safetyApi: SafetyApi by lazy { retrofit.create(SafetyApi::class.java) }
     val tripShareApi: TripShareApi by lazy { retrofit.create(TripShareApi::class.java) }
     val directionsApi: DirectionsApi by lazy { retrofit.create(DirectionsApi::class.java) }
+    val deviceApi: DeviceApi by lazy { retrofit.create(DeviceApi::class.java) }
 }

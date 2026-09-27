@@ -51,6 +51,7 @@ object Routes {
 /** Which flow asked for a destination, so the result goes to the right place. */
 private const val PURPOSE_FIND = "find"
 private const val PURPOSE_OFFER = "offer"
+private const val PURPOSE_OFFER_ORIGIN = "offer_origin"
 private const val PURPOSE_SAVE = "save"
 
 private val TAB_ROUTES = setOf(Routes.HOME, Routes.ACTIVITY, Routes.ALERTS, Routes.ACCOUNT)
@@ -67,6 +68,8 @@ fun AppNav(
 
     var findDestination by remember { mutableStateOf<PickedPlace?>(null) }
     var offerDestination by remember { mutableStateOf<PickedPlace?>(null) }
+    // null means "use current location", same default OfferRideScreen falls back to on its own.
+    var offerOrigin by remember { mutableStateOf<PickedPlace?>(null) }
     var pendingSave by remember { mutableStateOf<PickedPlace?>(null) }
     var addressesVersion by remember { mutableIntStateOf(0) }
     var unreadCount by remember { mutableIntStateOf(0) }
@@ -98,6 +101,7 @@ fun AppNav(
         when (purpose) {
             PURPOSE_SAVE -> pendingSave = place       // Account asked for a place to bookmark
             PURPOSE_OFFER -> { offerDestination = place; recordDestination(place) }
+            PURPOSE_OFFER_ORIGIN -> offerOrigin = place   // not a "destination" — nothing to record
             else -> { findDestination = place; recordDestination(place) }
         }
     }
@@ -151,7 +155,12 @@ fun AppNav(
             modifier = Modifier.padding(innerPadding)
         ) {
             composable(Routes.LOGIN) {
+                val context = androidx.compose.ui.platform.LocalContext.current
                 LoginScreen(onLoginSuccess = { profileComplete ->
+                    // The FCM token exists well before this point; this is the first moment
+                    // there is a user to attach it to.
+                    com.quickpool.app.notifications.DeviceRegistrar
+                        .registerIfSignedIn(context)
                     val next = if (profileComplete) Routes.HOME else Routes.REGISTER
                     navController.navigate(next) { popUpTo(Routes.LOGIN) { inclusive = true } }
                 })
@@ -173,11 +182,16 @@ fun AppNav(
             }
             composable(Routes.OFFER_RIDE) {
                 OfferRideScreen(
+                    origin = offerOrigin,
+                    onPickOrigin = {
+                        navController.navigate(Routes.locationSearch(PURPOSE_OFFER_ORIGIN))
+                    },
                     destination = offerDestination,
                     onPickDestination = {
                         navController.navigate(Routes.locationSearch(PURPOSE_OFFER))
                     },
                     onPosted = {
+                        offerOrigin = null
                         offerDestination = null
                         navController.popBackStack()
                     },
@@ -221,7 +235,7 @@ fun AppNav(
                         applyDestination(purpose, picked)
                         // Skip the search sheet on the way back.
                         val target = when (purpose) {
-                            PURPOSE_OFFER -> Routes.OFFER_RIDE
+                            PURPOSE_OFFER, PURPOSE_OFFER_ORIGIN -> Routes.OFFER_RIDE
                             PURPOSE_SAVE -> Routes.ACCOUNT
                             else -> Routes.HOME
                         }

@@ -27,17 +27,30 @@ interface RideApi {
     suspend fun rejectBooking(@Path("id") id: String): Response<Unit>
 
     @GET("api/v1/bookings/requests")
-    suspend fun bookingRequests(): Response<List<BookingRequestDto>>
+    suspend fun bookingRequests(
+        @Query("page") page: Int = 0,
+        @Query("size") size: Int = DEFAULT_PAGE_SIZE
+    ): Response<PageResponse<BookingRequestDto>>
 
     @PUT("api/v1/ride-offers/{id}/start")
     suspend fun startRide(@Path("id") id: String): Response<Unit>
 
     @GET("api/v1/ride-offers/mine")
-    suspend fun myRides(): Response<List<RideOfferResponseDto>>
+    suspend fun myRides(
+        @Query("page") page: Int = 0,
+        @Query("size") size: Int = DEFAULT_PAGE_SIZE
+    ): Response<PageResponse<RideOfferResponseDto>>
 
     @GET("api/v1/ride-offers")
     suspend fun ridesByIds(@Query("ids") ids: List<String>): Response<List<RideOfferResponseDto>>
 
     @GET("api/v1/bookings/mine")
-    suspend fun myBookings(): Response<List<BookingWithRideDto>>
+    suspend fun myBookings(
+        @Query("page") page: Int = 0,
+        @Query("size") size: Int = DEFAULT_PAGE_SIZE
+    ): Response<PageResponse<BookingWithRideDto>>
+
+    /** Confirmed passenger ids in booking order — used to number live-map markers 1, 2, 3... */
+    @GET("api/v1/ride-offers/{id}/passengers")
+    suspend fun passengerOrder(@Path("id") id: String): Response<List<String>>
 }

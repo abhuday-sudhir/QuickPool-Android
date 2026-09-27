@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import com.quickpool.app.network.ApiClient
 import com.quickpool.app.network.BookingRequestDto
 import com.quickpool.app.network.RideOfferResponseDto
+import com.quickpool.app.ui.components.LoadMoreRow
 import com.quickpool.app.ui.components.PersonActionsMenu
 import com.quickpool.app.ui.components.RateUserDialog
 import com.quickpool.app.ui.components.RatingStars
@@ -26,7 +27,13 @@ import kotlinx.coroutines.launch
 @Composable
 fun MyRidesScreen(onStartRide: (String) -> Unit, onDataChanged: () -> Unit) {
     var rides by remember { mutableStateOf<List<RideOfferResponseDto>>(emptyList()) }
+    var ridesPage by remember { mutableStateOf(0) }
+    var ridesHasNext by remember { mutableStateOf(false) }
+    var ridesLoadingMore by remember { mutableStateOf(false) }
     var requests by remember { mutableStateOf<List<BookingRequestDto>>(emptyList()) }
+    var requestsPage by remember { mutableStateOf(0) }
+    var requestsHasNext by remember { mutableStateOf(false) }
+    var requestsLoadingMore by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var ratingTarget by remember { mutableStateOf<BookingRequestDto?>(null) }
@@ -38,16 +45,59 @@ fun MyRidesScreen(onStartRide: (String) -> Unit, onDataChanged: () -> Unit) {
     suspend fun load() {
         try {
             ratedKeys = loadGivenRatings()
-            val ridesResponse = ApiClient.rideApi.myRides()
-            if (ridesResponse.isSuccessful) rides = ridesResponse.body() ?: emptyList()
-            else errorMessage = "Failed to load rides (${ridesResponse.code()})"
+            val ridesResponse = ApiClient.rideApi.myRides(page = 0)
+            if (ridesResponse.isSuccessful) {
+                val body = ridesResponse.body()
+                rides = body?.content ?: emptyList()
+                ridesHasNext = body?.hasNext ?: false
+                ridesPage = 0
+            } else errorMessage = "Failed to load rides (${ridesResponse.code()})"
 
-            val requestsResponse = ApiClient.rideApi.bookingRequests()
-            if (requestsResponse.isSuccessful) requests = requestsResponse.body() ?: emptyList()
+            val requestsResponse = ApiClient.rideApi.bookingRequests(page = 0)
+            if (requestsResponse.isSuccessful) {
+                val body = requestsResponse.body()
+                requests = body?.content ?: emptyList()
+                requestsHasNext = body?.hasNext ?: false
+                requestsPage = 0
+            }
         } catch (e: Exception) {
             errorMessage = "Error: ${e.message}"
         } finally {
             isLoading = false
+        }
+    }
+
+    suspend fun loadMoreRides() {
+        if (ridesLoadingMore || !ridesHasNext) return
+        ridesLoadingMore = true
+        try {
+            val response = ApiClient.rideApi.myRides(page = ridesPage + 1)
+            if (response.isSuccessful) {
+                val body = response.body()
+                rides = rides + (body?.content ?: emptyList())
+                ridesHasNext = body?.hasNext ?: false
+                ridesPage += 1
+            }
+        } catch (_: Exception) {
+        } finally {
+            ridesLoadingMore = false
+        }
+    }
+
+    suspend fun loadMoreRequests() {
+        if (requestsLoadingMore || !requestsHasNext) return
+        requestsLoadingMore = true
+        try {
+            val response = ApiClient.rideApi.bookingRequests(page = requestsPage + 1)
+            if (response.isSuccessful) {
+                val body = response.body()
+                requests = requests + (body?.content ?: emptyList())
+                requestsHasNext = body?.hasNext ?: false
+                requestsPage += 1
+            }
+        } catch (_: Exception) {
+        } finally {
+            requestsLoadingMore = false
         }
     }
 
@@ -198,6 +248,10 @@ fun MyRidesScreen(onStartRide: (String) -> Unit, onDataChanged: () -> Unit) {
                 item { Spacer(modifier = Modifier.height(8.dp)) }
             }
 
+            if (requestsHasNext) {
+                item { LoadMoreRow(isLoading = requestsLoadingMore) { scope.launch { loadMoreRequests() } } }
+            }
+
             item {
                 Text(
                     "Rides you're driving",
@@ -236,6 +290,10 @@ fun MyRidesScreen(onStartRide: (String) -> Unit, onDataChanged: () -> Unit) {
                         }
                     }
                 })
+            }
+
+            if (ridesHasNext) {
+                item { LoadMoreRow(isLoading = ridesLoadingMore) { scope.launch { loadMoreRides() } } }
             }
         }
     }

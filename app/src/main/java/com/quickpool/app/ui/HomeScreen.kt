@@ -1,8 +1,17 @@
 package com.quickpool.app.ui
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -13,6 +22,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -33,7 +44,6 @@ import com.quickpool.app.ui.components.ImpactCard
 import com.quickpool.app.ui.components.PersonActionsMenu
 import com.quickpool.app.ui.components.RatingStars
 import com.quickpool.app.ui.components.ReportUserDialog
-import com.quickpool.app.ui.theme.AccentGreen
 import kotlinx.coroutines.launch
 
 private val DEFAULT_POSITION = LatLng(28.6139, 77.2090) // Delhi fallback
@@ -50,7 +60,9 @@ fun HomeScreen(
     val scope = rememberCoroutineScope()
 
     val destinationMarker = remember { squareMarker(Color.Black) }
-    val originMarker = remember { dotMarker(AccentGreen) }
+    // Black to match the blinking pin shown while resolving the fix — one visual
+    // language for "your position" on this map, whichever state it's in.
+    val originMarker = remember { dotMarker(Color.Black) }
 
     var currentLocation by remember { mutableStateOf<LatLng?>(null) }
     var locatingFailed by remember { mutableStateOf(false) }
@@ -197,6 +209,21 @@ fun HomeScreen(
                 }
             }
 
+            // Waiting on the first GPS fix is normal, not an error — a full cover over the
+            // map (which would otherwise show placeholder tiles loading underneath) with a
+            // pulsing marker reads better than red text under the sheet. Fixed light grey,
+            // not a theme color: the marker itself is fixed black (see PulsingLocationMarker),
+            // and MaterialTheme.colorScheme.background is pure black in dark theme — black on
+            // black rendered as a plain black screen with no visible pulse at all.
+            if (currentLocation == null && locationPermissionGranted && !locatingFailed) {
+                Box(
+                    modifier = Modifier.matchParentSize().background(com.quickpool.app.ui.theme.LightGray),
+                    contentAlignment = Alignment.Center
+                ) {
+                    PulsingLocationMarker()
+                }
+            }
+
             FloatingActionButton(
                 onClick = {
                     scope.launch {
@@ -302,13 +329,54 @@ fun apiErrorText(code: Int, body: String?): String {
 @Composable
 private fun LocationStatus(permissionGranted: Boolean, hasLocation: Boolean, failed: Boolean) {
     if (hasLocation) return
-    val message = when {
-        !permissionGranted -> "Location permission is off. Enable it in Settings to use QuickPool."
-        failed -> "Couldn't get your location. Make sure GPS is on, then tap the location button on the map."
-        else -> "Getting your location…"
-    }
+    // Actively locating, permission already granted: that's the normal startup path, shown
+    // as the pulsing marker on the map instead — nothing to say here, and definitely not in red.
+    if (permissionGranted && !failed) return
+    val message = if (!permissionGranted)
+        "Location permission is off. Enable it in Settings to use QuickPool."
+    else
+        "Couldn't get your location. Make sure GPS is on, then tap the location button on the map."
     Spacer(modifier = Modifier.height(12.dp))
     Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+}
+
+/** A bold radar-style pulse behind a blinking location pin — reads as "still searching," not an error. */
+@Composable
+private fun PulsingLocationMarker(modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition(label = "locating")
+    val ringScale by transition.animateFloat(
+        initialValue = 1f,
+        targetValue = 3f,
+        animationSpec = infiniteRepeatable(tween(1200, easing = LinearEasing), RepeatMode.Restart),
+        label = "pulse-scale"
+    )
+    val ringAlpha by transition.animateFloat(
+        initialValue = 0.85f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(tween(1200, easing = LinearEasing), RepeatMode.Restart),
+        label = "pulse-alpha"
+    )
+    val blink by transition.animateFloat(
+        initialValue = 1f,
+        targetValue = 0.15f,
+        animationSpec = infiniteRepeatable(tween(500, easing = LinearEasing), RepeatMode.Reverse),
+        label = "blink"
+    )
+    Box(modifier = modifier.size(72.dp), contentAlignment = Alignment.Center) {
+        Box(
+            modifier = Modifier
+                .size(26.dp)
+                .scale(ringScale)
+                .alpha(ringAlpha)
+                .background(Color.Black, CircleShape)
+        )
+        Icon(
+            imageVector = Icons.Default.LocationOn,
+            contentDescription = null,
+            tint = Color.Black,
+            modifier = Modifier.size(40.dp).alpha(blink)
+        )
+    }
 }
 
 @Composable

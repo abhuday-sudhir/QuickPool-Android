@@ -26,8 +26,14 @@ Backend (run from `/Users/abhuday/Projects/QuickPool`, note `sh mvnw` — the wr
 ```
 sh mvnw -q -DskipTests clean package    # build the jar
 sh mvnw test                            # unit tests
-java -jar target/quickpool-0.0.1-SNAPSHOT.jar --server.port=8081
+sh run.sh 8081                          # start with .env loaded — use this, not java -jar
 ```
+
+`run.sh` exists because Spring Boot does **not** read `.env`. `application.yml` resolves
+`${MAPS_SERVER_KEY}` and `${FIREBASE_CREDENTIALS}` from the process environment, so a plain
+`java -jar` silently gets the empty defaults. Both failures are quiet — no route line drawn,
+no push delivered — with nothing on screen to say why. `run.sh` sources `.env` with `set -a`
+and launches the jar.
 
 Always `clean`. Maven leaves stale `.class` files behind when a source file is deleted, and a leftover `@Service` gets packaged into the jar — which surfaces as a *duplicate bean* startup failure that looks nothing like its cause.
 

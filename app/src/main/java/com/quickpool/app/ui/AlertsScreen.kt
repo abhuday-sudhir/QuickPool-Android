@@ -15,20 +15,27 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.quickpool.app.network.ApiClient
 import com.quickpool.app.network.NotificationDto
+import com.quickpool.app.ui.components.LoadMoreRow
 import kotlinx.coroutines.launch
 
 @Composable
 fun AlertsScreen(onNotificationsChanged: () -> Unit) {
     var items by remember { mutableStateOf<List<NotificationDto>>(emptyList()) }
+    var page by remember { mutableStateOf(0) }
+    var hasNext by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(true) }
+    var isLoadingMore by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
     suspend fun load() {
         try {
-            val response = ApiClient.notificationApi.list()
+            val response = ApiClient.notificationApi.list(page = 0)
             if (response.isSuccessful) {
-                items = response.body() ?: emptyList()
+                val body = response.body()
+                items = body?.content ?: emptyList()
+                hasNext = body?.hasNext ?: false
+                page = 0
                 errorMessage = null
             } else {
                 errorMessage = "Couldn't load alerts (${response.code()})"
@@ -37,6 +44,24 @@ fun AlertsScreen(onNotificationsChanged: () -> Unit) {
             errorMessage = "Error: ${e.message}"
         } finally {
             isLoading = false
+        }
+    }
+
+    suspend fun loadMore() {
+        if (isLoadingMore || !hasNext) return
+        isLoadingMore = true
+        try {
+            val response = ApiClient.notificationApi.list(page = page + 1)
+            if (response.isSuccessful) {
+                val body = response.body()
+                items = items + (body?.content ?: emptyList())
+                hasNext = body?.hasNext ?: false
+                page += 1
+            }
+        } catch (_: Exception) {
+            // A failed "load more" leaves the list as-is; the button just stays put to retry.
+        } finally {
+            isLoadingMore = false
         }
     }
 
@@ -96,6 +121,11 @@ fun AlertsScreen(onNotificationsChanged: () -> Unit) {
                                 onNotificationsChanged()
                             }
                         }
+                    }
+                }
+                if (hasNext) {
+                    item {
+                        LoadMoreRow(isLoading = isLoadingMore) { scope.launch { loadMore() } }
                     }
                 }
             }
